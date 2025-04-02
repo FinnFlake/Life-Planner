@@ -13,6 +13,7 @@ A customizable life planning checklist web application built with HTML, CSS, and
 - Dark/Light theme toggle
 - Responsive design for all devices
 - Local storage to save your tasks
+- Drag and drop functionality to reorder tasks
 
 ## How to Use
 
