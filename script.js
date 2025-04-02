@@ -21,6 +21,7 @@ let tasks = JSON.parse(localStorage.getItem('tasks')) || [];
 let currentFilter = 'all';
 let currentCategory = 'all';
 let editingTaskId = null;
+let draggedItem = null;
 
 // Initialize the app
 function init() {
@@ -55,7 +56,8 @@ function addTask() {
         text: taskText,
         category: category,
         completed: false,
-        date: new Date().toISOString()
+        date: new Date().toISOString(),
+        order: tasks.length > 0 ? Math.min(...tasks.map(t => t.order)) - 1 : 0
     };
     
     tasks.unshift(newTask);
@@ -148,6 +150,15 @@ function filterTasks() {
         );
     }
     
+    // Sort by order
+    filteredTasks.sort((a, b) => {
+        // If order is not set (for backward compatibility), use date
+        if (a.order === undefined || b.order === undefined) {
+            return new Date(b.date) - new Date(a.date);
+        }
+        return a.order - b.order;
+    });
+    
     return filteredTasks;
 }
 
@@ -159,6 +170,90 @@ function formatDate(dateString) {
         day: 'numeric', 
         year: 'numeric' 
     });
+}
+
+// Handle drag start
+function handleDragStart(e) {
+    draggedItem = this;
+    this.style.opacity = '0.4';
+    
+    // Set data transfer
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', this.getAttribute('data-id'));
+    
+    // Add dragging class
+    this.classList.add('dragging');
+}
+
+// Handle drag end
+function handleDragEnd() {
+    this.style.opacity = '1';
+    this.classList.remove('dragging');
+    
+    // Reset draggedItem
+    draggedItem = null;
+    
+    // Update all task items with new order values
+    const taskItems = Array.from(tasksList.querySelectorAll('.task-item'));
+    taskItems.forEach((item, index) => {
+        const id = item.getAttribute('data-id');
+        const task = tasks.find(t => t.id === id);
+        if (task) {
+            task.order = index;
+        }
+    });
+    
+    // Save updated order
+    saveTasks();
+}
+
+// Handle drag over
+function handleDragOver(e) {
+    e.preventDefault();
+    return false;
+}
+
+// Handle drag enter
+function handleDragEnter() {
+    this.classList.add('drag-over');
+}
+
+// Handle drag leave
+function handleDragLeave() {
+    this.classList.remove('drag-over');
+}
+
+// Handle drop
+function handleDrop(e) {
+    e.stopPropagation();
+    
+    // Remove drag-over class
+    this.classList.remove('drag-over');
+    
+    // Get the dragged item id
+    const draggedId = e.dataTransfer.getData('text/plain');
+    
+    // Get the drop target id
+    const dropTargetId = this.getAttribute('data-id');
+    
+    // If dropping on itself, do nothing
+    if (draggedId === dropTargetId) {
+        return false;
+    }
+    
+    // Find the positions in the DOM
+    const taskItems = Array.from(tasksList.querySelectorAll('.task-item'));
+    const draggedIndex = taskItems.findIndex(item => item.getAttribute('data-id') === draggedId);
+    const dropTargetIndex = taskItems.findIndex(item => item.getAttribute('data-id') === dropTargetId);
+    
+    // Insert the dragged item before or after the drop target
+    if (draggedIndex < dropTargetIndex) {
+        this.parentNode.insertBefore(draggedItem, this.nextSibling);
+    } else {
+        this.parentNode.insertBefore(draggedItem, this);
+    }
+    
+    return false;
 }
 
 // Render tasks
@@ -181,6 +276,9 @@ function renderTasks() {
     filteredTasks.forEach(task => {
         const taskItem = document.createElement('li');
         taskItem.classList.add('task-item');
+        taskItem.setAttribute('data-id', task.id);
+        taskItem.setAttribute('draggable', 'true');
+        
         if (task.completed) {
             taskItem.classList.add('completed');
         }
@@ -197,6 +295,9 @@ function renderTasks() {
             </div>
             <div class="task-date">${formatDate(task.date)}</div>
             <div class="task-actions">
+                <div class="action-btn drag-handle" title="Drag to reorder">
+                    <i class="fas fa-grip-lines"></i>
+                </div>
                 <div class="action-btn edit-btn" data-id="${task.id}">
                     <i class="fas fa-edit"></i>
                 </div>
@@ -205,6 +306,14 @@ function renderTasks() {
                 </div>
             </div>
         `;
+        
+        // Add drag and drop event listeners
+        taskItem.addEventListener('dragstart', handleDragStart);
+        taskItem.addEventListener('dragend', handleDragEnd);
+        taskItem.addEventListener('dragover', handleDragOver);
+        taskItem.addEventListener('dragenter', handleDragEnter);
+        taskItem.addEventListener('dragleave', handleDragLeave);
+        taskItem.addEventListener('drop', handleDrop);
         
         tasksList.appendChild(taskItem);
     });
